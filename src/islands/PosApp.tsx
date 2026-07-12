@@ -1,12 +1,21 @@
 import { useStore } from '@nanostores/preact';
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
+import { assetUrl } from '../lib/assetUrl';
 import { cacheProductsFromSupabase } from '../lib/productCache';
 import { startSyncEngine } from '../lib/sync';
 import { clearProfile, createProfile, loadProfile, profile, profileLoading, type Profile } from '../stores/profile';
 import { session, sessionLoading, signInWithPassword, signOut, signUpWithPassword } from '../stores/session';
 import Cart from './Cart';
+import { LogoutIcon } from './icons';
 import ProductCatalog from './ProductCatalog';
 import TransactionHistory from './TransactionHistory';
+
+const inputClass =
+  'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10';
+
+const primaryButtonClass =
+  'w-full rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 active:bg-brand-800 disabled:cursor-not-allowed disabled:bg-slate-300';
 
 export default function PosApp() {
   const currentSession = useStore(session);
@@ -24,16 +33,19 @@ export default function PosApp() {
     }
   }, [userId]);
 
-  if (loadingSession) {
-    return <p class="text-sm text-gray-500">Memuat sesi...</p>;
+  if (loadingSession || (currentSession && loadingProfile)) {
+    return (
+      <AuthShell>
+        <div class="flex flex-col items-center gap-3 py-10">
+          <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-600" />
+          <p class="text-sm text-slate-500">Memuat...</p>
+        </div>
+      </AuthShell>
+    );
   }
 
   if (!currentSession) {
     return <LoginForm />;
-  }
-
-  if (loadingProfile) {
-    return <p class="text-sm text-gray-500">Memuat profil toko...</p>;
   }
 
   if (!currentProfile) {
@@ -41,6 +53,15 @@ export default function PosApp() {
   }
 
   return <AuthenticatedApp profile={currentProfile} />;
+}
+
+function AuthShell({ children }: { children: ComponentChildren }) {
+  return (
+    <div class="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-brand-50 via-slate-50 to-slate-50 px-4 py-10">
+      <img src={assetUrl('icons/logo-tittle.webp')} alt="Sahma.id — POS System" class="mb-8 h-12 w-auto sm:h-14" />
+      <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card sm:p-8">{children}</div>
+    </div>
+  );
 }
 
 function AuthenticatedApp({ profile: currentProfile }: { profile: Profile }) {
@@ -65,54 +86,78 @@ function AuthenticatedApp({ profile: currentProfile }: { profile: Profile }) {
   }, [ownerId]);
 
   return (
-    <div class="flex flex-col gap-4">
-      <div class="flex items-center justify-between border-b border-gray-200 pb-3">
-        <div>
-          <p class="text-sm text-gray-500">Masuk sebagai</p>
-          <p class="font-semibold">
-            {currentProfile.store_name} ({currentProfile.role})
-          </p>
+    <div class="min-h-screen bg-slate-50 pb-24 sm:pb-6">
+      <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur pt-[env(safe-area-inset-top)]">
+        <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <img src={assetUrl('icons/logo-persegi.webp')} alt="" class="h-9 w-9 shrink-0 rounded-[10px]" />
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold leading-tight text-slate-900">{currentProfile.store_name}</p>
+              <span
+                class={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  currentProfile.role === 'owner' ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {currentProfile.role === 'owner' ? 'Pemilik' : 'Kasir'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <LogoutIcon class="h-4 w-4" />
+            <span class="hidden sm:inline">Keluar</span>
+          </button>
         </div>
-        <button type="button" onClick={() => signOut()} class="text-sm text-red-600 underline">
-          Keluar
-        </button>
+
+        {currentProfile.role === 'owner' && (
+          <div class="mx-auto max-w-5xl px-4 pb-3">
+            <div class="inline-flex rounded-full bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setView('kasir')}
+                class={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                  view === 'kasir' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                Kasir
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('laporan')}
+                class={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                  view === 'laporan' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                Riwayat &amp; Laporan
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      <div class="mx-auto max-w-5xl px-4 py-4">
+        {productCacheError && (
+          <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Gagal memuat produk terbaru: {productCacheError}
+          </div>
+        )}
+
+        {view === 'laporan' && currentProfile.role === 'owner' ? (
+          <TransactionHistory userId={ownerId} storeName={currentProfile.store_name} />
+        ) : (
+          <main class="grid gap-6 sm:grid-cols-2 sm:items-start">
+            <section>
+              <ProductCatalog profile={currentProfile} />
+            </section>
+            <section class="sm:sticky sm:top-32">
+              <Cart profile={currentProfile} />
+            </section>
+          </main>
+        )}
       </div>
-      {productCacheError && (
-        <p class="text-sm text-red-600">Gagal memuat produk terbaru: {productCacheError}</p>
-      )}
-
-      {currentProfile.role === 'owner' && (
-        <div class="flex gap-4 border-b border-gray-200">
-          <button
-            type="button"
-            onClick={() => setView('kasir')}
-            class={`pb-2 text-sm ${view === 'kasir' ? 'border-b-2 border-blue-600 font-semibold text-blue-600' : 'text-gray-500'}`}
-          >
-            Kasir
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('laporan')}
-            class={`pb-2 text-sm ${view === 'laporan' ? 'border-b-2 border-blue-600 font-semibold text-blue-600' : 'text-gray-500'}`}
-          >
-            Riwayat &amp; Laporan
-          </button>
-        </div>
-      )}
-
-      {view === 'laporan' && currentProfile.role === 'owner' ? (
-        <TransactionHistory userId={ownerId} />
-      ) : (
-        <main class="grid gap-6 sm:grid-cols-2 sm:items-start">
-          <section>
-            <h2 class="mb-3 text-xl font-bold">Katalog Produk</h2>
-            <ProductCatalog profile={currentProfile} />
-          </section>
-          <section>
-            <Cart profile={currentProfile} />
-          </section>
-        </main>
-      )}
     </div>
   );
 }
@@ -126,10 +171,16 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <div class="mx-auto flex max-w-sm flex-col gap-3">
-      <h1 class="text-xl font-bold">{mode === 'signin' ? 'Masuk ke POS' : 'Daftar Toko Baru'}</h1>
+    <AuthShell>
+      <h1 class="text-center text-lg font-semibold text-slate-900">
+        {mode === 'signin' ? 'Masuk ke toko Anda' : 'Daftarkan toko baru'}
+      </h1>
+      <p class="mt-1 text-center text-sm text-slate-500">
+        {mode === 'signin' ? 'Kelola penjualan Anda di mana saja.' : 'Mulai kelola penjualan dalam hitungan menit.'}
+      </p>
+
       <form
-        class="flex flex-col gap-2"
+        class="mt-6 flex flex-col gap-3"
         onSubmit={async (e) => {
           e.preventDefault();
           setError(null);
@@ -155,33 +206,42 @@ function LoginForm() {
           }
         }}
       >
-        <input
-          type="email"
-          required
-          value={email}
-          onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
-          placeholder="Email toko Anda"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        />
-        <input
-          type="password"
-          required
-          minLength={6}
-          value={password}
-          onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
-          placeholder="Password"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={submitting}
-          class="rounded-md bg-blue-600 px-3 py-2 text-sm text-white disabled:bg-gray-300"
-        >
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-slate-600">Email</span>
+          <input
+            type="email"
+            required
+            value={email}
+            onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+            placeholder="nama@tokoanda.com"
+            class={inputClass}
+          />
+        </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-slate-600">Password</span>
+          <input
+            type="password"
+            required
+            minLength={6}
+            value={password}
+            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+            placeholder="Minimal 6 karakter"
+            class={inputClass}
+          />
+        </label>
+
+        <button type="submit" disabled={submitting} class={`${primaryButtonClass} mt-2`}>
           {submitting ? 'Memproses...' : mode === 'signin' ? 'Masuk' : 'Daftar'}
         </button>
-        {error && <p class="text-sm text-red-600">{error}</p>}
-        {info && <p class="text-sm text-green-600">{info}</p>}
+
+        {error && (
+          <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        )}
+        {info && <p class="rounded-lg bg-accent-50 px-3 py-2 text-sm text-accent-700">{info}</p>}
       </form>
+
       <button
         type="button"
         onClick={() => {
@@ -189,11 +249,12 @@ function LoginForm() {
           setError(null);
           setInfo(null);
         }}
-        class="text-sm text-gray-500 underline"
+        class="mt-5 w-full text-center text-sm text-slate-500 transition hover:text-brand-600"
       >
-        {mode === 'signin' ? 'Belum punya akun? Daftar' : 'Sudah punya akun? Masuk'}
+        {mode === 'signin' ? 'Belum punya akun? ' : 'Sudah punya akun? '}
+        <span class="font-semibold text-brand-600">{mode === 'signin' ? 'Daftar' : 'Masuk'}</span>
       </button>
-    </div>
+    </AuthShell>
   );
 }
 
@@ -203,10 +264,12 @@ function ProfileSetupForm({ userId }: { userId: string }) {
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <div class="mx-auto flex max-w-sm flex-col gap-3">
-      <h1 class="text-xl font-bold">Lengkapi Profil Toko</h1>
+    <AuthShell>
+      <h1 class="text-center text-lg font-semibold text-slate-900">Lengkapi profil toko</h1>
+      <p class="mt-1 text-center text-sm text-slate-500">Satu langkah lagi sebelum Anda mulai berjualan.</p>
+
       <form
-        class="flex flex-col gap-2"
+        class="mt-6 flex flex-col gap-3"
         onSubmit={async (e) => {
           e.preventDefault();
           setError(null);
@@ -220,23 +283,27 @@ function ProfileSetupForm({ userId }: { userId: string }) {
           }
         }}
       >
-        <input
-          type="text"
-          required
-          value={storeName}
-          onInput={(e) => setStoreName((e.target as HTMLInputElement).value)}
-          placeholder="Nama toko"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={submitting}
-          class="rounded-md bg-blue-600 px-3 py-2 text-sm text-white disabled:bg-gray-300"
-        >
-          {submitting ? 'Menyimpan...' : 'Simpan'}
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-slate-600">Nama toko</span>
+          <input
+            type="text"
+            required
+            value={storeName}
+            onInput={(e) => setStoreName((e.target as HTMLInputElement).value)}
+            placeholder="mis. Toko Berkah Jaya"
+            class={inputClass}
+          />
+        </label>
+
+        <button type="submit" disabled={submitting} class={`${primaryButtonClass} mt-2`}>
+          {submitting ? 'Menyimpan...' : 'Simpan & Mulai'}
         </button>
-        {error && <p class="text-sm text-red-600">{error}</p>}
+        {error && (
+          <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        )}
       </form>
-    </div>
+    </AuthShell>
   );
 }

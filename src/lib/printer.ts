@@ -2,7 +2,15 @@ import ReceiptPrinterEncoder from '@point-of-sale/receipt-printer-encoder';
 import WebBluetoothReceiptPrinter, {
   type ConnectedBluetoothPrinter,
 } from '@point-of-sale/webbluetooth-receipt-printer';
-import type { LocalTransaction } from './db';
+import type { TransactionItem } from './db';
+
+// Longgar dengan sengaja (bukan LocalTransaction penuh) supaya bisa menerima transaksi dari
+// sumber mana pun yang punya bentuk ini - keranjang (LocalTransaction) maupun laporan (ReportTransaction).
+export interface PrintableTransaction {
+  items: TransactionItem[];
+  total_amount: number;
+  client_created_at: string;
+}
 
 export function isBluetoothPrintingSupported(): boolean {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
@@ -12,22 +20,67 @@ export function isBluetoothPrintingSupported(): boolean {
 const printer = isBluetoothPrintingSupported() ? new WebBluetoothReceiptPrinter() : null;
 let connectedDevice: ConnectedBluetoothPrinter | null = null;
 
+const LAST_DEVICE_STORAGE_KEY = 'sahma-pos-last-printer-device';
+
+function saveLastDevice(device: ConnectedBluetoothPrinter): void {
+  try {
+    localStorage.setItem(LAST_DEVICE_STORAGE_KEY, JSON.stringify({ id: device.id }));
+  } catch {
+    // localStorage bisa gagal (mode privat dsb) - reconnect otomatis bukan fitur esensial, abaikan saja.
+  }
+}
+
+function getLastDevice(): { id: string } | null {
+  try {
+    const raw = localStorage.getItem(LAST_DEVICE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Listener internal - selalu aktif sejak modul dimuat, terpisah dari callback yang didaftarkan UI lewat
+// onPrinterConnected/onPrinterDisconnected - supaya state & auto-reconnect tetap jalan walau belum ada
+// komponen yang mount duluan.
+printer?.addEventListener('connected', (device) => {
+  connectedDevice = device;
+  saveLastDevice(device);
+});
+
+printer?.addEventListener('disconnected', () => {
+  connectedDevice = null;
+  void tryAutoReconnect(); // printer mungkin cuma sesaat di luar jangkauan - coba sambung ulang sendiri
+});
+
 export function onPrinterConnected(callback: (device: ConnectedBluetoothPrinter) => void): void {
-  printer?.addEventListener('connected', (device) => {
-    connectedDevice = device;
-    callback(device);
-  });
+  printer?.addEventListener('connected', callback);
 }
 
 export function onPrinterDisconnected(callback: () => void): void {
-  printer?.addEventListener('disconnected', () => {
-    connectedDevice = null;
-    callback();
-  });
+  printer?.addEventListener('disconnected', callback);
 }
 
 export function isPrinterConnected(): boolean {
   return connectedDevice !== null;
+}
+
+// Coba sambung ulang TANPA menampilkan dialog pemilihan perangkat (jadi bisa dipanggil otomatis,
+// tidak perlu klik pengguna). Ini hanya berhasil kalau browser mendukung navigator.bluetooth.getDevices()
+// (izin Bluetooth persisten) - per 2026 API ini masih di belakang flag eksperimental Chrome
+// (chrome://flags/#enable-web-bluetooth-new-permissions-backend), belum aktif default di kebanyakan
+// browser. Kalau tidak didukung/perangkat tidak ditemukan, fungsi ini gagal diam-diam (aman, tidak
+// merusak apa pun) - pengguna tinggal klik "Sambungkan Printer" seperti biasa.
+export async function tryAutoReconnect(): Promise<boolean> {
+  if (!printer) return false;
+  const lastDevice = getLastDevice();
+  if (!lastDevice) return false;
+
+  try {
+    await printer.reconnect(lastDevice);
+  } catch {
+    return false;
+  }
+  return isPrinterConnected();
 }
 
 export interface PrinterActionResult {
@@ -78,7 +131,10 @@ export async function connectPrinter(): Promise<PrinterActionResult> {
   }
 }
 
-export async function printReceipt(transaction: LocalTransaction, storeName: string): Promise<PrinterActionResult> {
+export async function printReceipt(
+  transaction: PrintableTransaction,
+  storeName: string
+): Promise<PrinterActionResult> {
   if (!printer) {
     return { ok: false, error: 'Web Bluetooth tidak didukung di browser ini.' };
   }
@@ -95,8 +151,22 @@ export async function printReceipt(transaction: LocalTransaction, storeName: str
   }
 }
 
+// Gabungkan sambung + cetak jadi satu klik pengguna: requestDevice() (di dalam connectPrinter())
+// tetap terpicu langsung dari gesture klik ini (belum ada await lain sebelumnya), jadi tidak melanggar
+// persyaratan user-activation Web Bluetooth - operasi GATT connect/print setelahnya tidak butuh gesture baru.
+export async function connectAndPrint(
+  transaction: PrintableTransaction,
+  storeName: string
+): Promise<PrinterActionResult> {
+  if (!isPrinterConnected()) {
+    const connectResult = await connectPrinter();
+    if (!connectResult.ok) return connectResult;
+  }
+  return printReceipt(transaction, storeName);
+}
+
 function buildReceipt(
-  transaction: LocalTransaction,
+  transaction: PrintableTransaction,
   storeName: string,
   device: ConnectedBluetoothPrinter
 ): Uint8Array {

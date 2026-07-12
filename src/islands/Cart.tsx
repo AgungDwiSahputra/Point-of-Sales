@@ -2,12 +2,12 @@ import { useStore } from '@nanostores/preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { LocalTransaction } from '../lib/db';
 import {
-  connectPrinter,
+  connectAndPrint,
   isBluetoothPrintingSupported,
   isPrinterConnected,
   onPrinterConnected,
   onPrinterDisconnected,
-  printReceipt,
+  tryAutoReconnect,
 } from '../lib/printer';
 import {
   cartItems,
@@ -25,12 +25,16 @@ import {
   updateQty,
 } from '../stores/cart';
 import type { Profile } from '../stores/profile';
+import { BluetoothIcon, MinusIcon, PlusIcon, ReceiptIcon, ShoppingBagIcon, TrashIcon } from './icons';
 
 const currency = new Intl.NumberFormat('id-ID', {
   style: 'currency',
   currency: 'IDR',
   maximumFractionDigits: 0,
 });
+
+const smallFieldClass =
+  'w-24 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10';
 
 export default function Cart({ profile }: { profile: Profile }) {
   const items = useStore(cartItems);
@@ -42,7 +46,6 @@ export default function Cart({ profile }: { profile: Profile }) {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [printerConnected, setPrinterConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<LocalTransaction | null>(null);
 
@@ -54,76 +57,88 @@ export default function Cart({ profile }: { profile: Profile }) {
     onPrinterConnected(() => setPrinterConnected(true));
     onPrinterDisconnected(() => setPrinterConnected(false));
     setPrinterConnected(isPrinterConnected());
+    void tryAutoReconnect(); // sambung ulang otomatis kalau pernah tersambung & browser mendukungnya
   }, []);
 
   return (
-    <div class="flex flex-col gap-3">
-      <h2 class="text-lg font-semibold">Keranjang</h2>
+    <div class="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <ShoppingBagIcon class="h-5 w-5 text-brand-600" />
+        <h2 class="text-base font-semibold text-slate-900">Keranjang</h2>
+        {items.length > 0 && (
+          <span class="ml-auto rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700">
+            {items.reduce((sum, i) => sum + i.qty, 0)} item
+          </span>
+        )}
+      </div>
 
       {items.length === 0 ? (
-        <p class="text-sm text-gray-500">Keranjang kosong.</p>
+        <div class="flex flex-col items-center gap-2 py-6 text-center">
+          <ShoppingBagIcon class="h-7 w-7 text-slate-300" />
+          <p class="text-sm text-slate-500">Keranjang masih kosong.</p>
+        </div>
       ) : (
         <ul class="flex flex-col gap-2">
           {items.map((item) => (
-            <li
-              key={item.product_id}
-              class="flex items-center justify-between gap-2 rounded-lg border border-gray-200 p-2"
-            >
-              <div>
-                <p class="font-medium">{item.name}</p>
-                <p class="text-xs text-gray-500">
-                  {currency.format(item.price)} x {item.qty}
+            <li key={item.product_id} class="flex items-center gap-2 rounded-xl bg-slate-50 p-2.5">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-slate-900">{item.name}</p>
+                <p class="text-xs text-slate-500">
+                  {currency.format(item.price)} &times; {item.qty}
                 </p>
               </div>
-              <div class="flex items-center gap-1">
+              <div class="flex shrink-0 items-center gap-1 rounded-full bg-white p-1 shadow-sm">
                 <button
                   type="button"
                   onClick={() => updateQty(item.product_id, item.qty - 1)}
-                  class="rounded border px-2"
+                  class="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100"
+                  aria-label="Kurangi"
                 >
-                  -
+                  <MinusIcon class="h-3.5 w-3.5" />
                 </button>
-                <span class="w-6 text-center">{item.qty}</span>
+                <span class="w-5 text-center text-sm font-medium">{item.qty}</span>
                 <button
                   type="button"
                   disabled={item.qty >= item.stock}
                   onClick={() => updateQty(item.product_id, item.qty + 1)}
-                  class="rounded border px-2 disabled:opacity-40"
+                  class="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                  aria-label="Tambah"
                 >
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeFromCart(item.product_id)}
-                  class="ml-2 text-sm text-red-600"
-                >
-                  Hapus
+                  <PlusIcon class="h-3.5 w-3.5" />
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => removeFromCart(item.product_id)}
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                aria-label="Hapus item"
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
             </li>
           ))}
         </ul>
       )}
 
       {items.length > 0 && (
-        <div class="flex flex-col gap-2 border-t border-gray-200 pt-2">
-          <div class="flex items-center justify-between text-sm">
+        <div class="flex flex-col gap-2 border-t border-slate-100 pt-3">
+          <div class="flex items-center justify-between text-sm text-slate-600">
             <span>Subtotal</span>
             <span>{currency.format(subtotal)}</span>
           </div>
 
-          <label class="flex items-center justify-between gap-2 text-sm">
+          <label class="flex items-center justify-between gap-2 text-sm text-slate-600">
             <span>Diskon (Rp)</span>
             <input
               type="number"
               min={0}
               value={discount}
               onInput={(e) => setDiscount(Number((e.target as HTMLInputElement).value))}
-              class="w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-blue-500 focus:outline-none"
+              class={smallFieldClass}
             />
           </label>
 
-          <label class="flex items-center justify-between gap-2 text-sm">
+          <label class="flex items-center justify-between gap-2 text-sm text-slate-600">
             <span>Pajak (%)</span>
             <input
               type="number"
@@ -131,18 +146,18 @@ export default function Cart({ profile }: { profile: Profile }) {
               step="0.1"
               value={taxRate}
               onInput={(e) => setTaxRate(Number((e.target as HTMLInputElement).value))}
-              class="w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-blue-500 focus:outline-none"
+              class={smallFieldClass}
             />
           </label>
 
-          <div class="flex items-center justify-between text-sm text-gray-500">
+          <div class="flex items-center justify-between text-sm text-slate-500">
             <span>Pajak ({taxRate}%)</span>
             <span>{currency.format(tax)}</span>
           </div>
 
-          <div class="flex items-center justify-between border-t border-gray-200 pt-2 font-semibold">
-            <span>Total</span>
-            <span>{currency.format(total)}</span>
+          <div class="flex items-center justify-between border-t border-slate-100 pt-2.5">
+            <span class="text-sm font-semibold text-slate-900">Total</span>
+            <span class="text-lg font-bold text-brand-700">{currency.format(total)}</span>
           </div>
 
           <button
@@ -160,65 +175,70 @@ export default function Cart({ profile }: { profile: Profile }) {
                   : { type: 'error', text: result.error ?? 'Checkout gagal' }
               );
             }}
-            class="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
+            class="mt-1 rounded-xl bg-accent-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-700 active:bg-accent-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {submitting ? 'Memproses...' : 'Checkout'}
+            {submitting ? 'Memproses...' : `Checkout · ${currency.format(total)}`}
           </button>
-          <button type="button" onClick={() => clearCart()} class="text-sm text-gray-500 underline">
+          <button
+            type="button"
+            onClick={() => clearCart()}
+            class="text-center text-xs text-slate-400 transition hover:text-red-600"
+          >
             Kosongkan keranjang
           </button>
         </div>
       )}
 
       {message && (
-        <p class={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{message.text}</p>
+        <p
+          class={`rounded-lg px-3 py-2 text-sm ${
+            message.type === 'success' ? 'bg-accent-50 text-accent-700' : 'bg-red-50 text-red-700'
+          }`}
+        >
+          {message.text}
+        </p>
       )}
 
-      <div class="flex flex-col gap-2 border-t border-gray-200 pt-3">
-        <p class="text-sm font-medium">Printer Struk (Bluetooth)</p>
+      <div class="flex flex-col gap-2 border-t border-slate-100 pt-3">
+        <div class="flex items-center gap-2">
+          <BluetoothIcon class="h-4 w-4 text-slate-400" />
+          <p class="text-sm font-medium text-slate-700">Printer Struk</p>
+        </div>
 
         {!isBluetoothPrintingSupported() ? (
-          <p class="text-xs text-gray-500">
+          <p class="text-xs text-slate-500">
             Web Bluetooth tidak didukung di browser ini. Gunakan Chrome/Edge di Android atau Desktop.
           </p>
-        ) : !printerConnected ? (
-          <button
-            type="button"
-            disabled={connecting}
-            onClick={async () => {
-              setMessage(null);
-              setConnecting(true);
-              const result = await connectPrinter();
-              setConnecting(false);
-              if (!result.ok) setMessage({ type: 'error', text: result.error ?? 'Gagal menyambungkan printer' });
-            }}
-            class="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
-          >
-            {connecting ? 'Menyambungkan...' : 'Sambungkan Printer'}
-          </button>
         ) : (
-          <p class="text-xs text-green-600">Printer tersambung.</p>
-        )}
-
-        {printerConnected && lastTransaction && (
-          <button
-            type="button"
-            disabled={printing}
-            onClick={async () => {
-              setMessage(null);
-              setPrinting(true);
-              const result = await printReceipt(lastTransaction, profile.store_name);
-              setPrinting(false);
-              setMessage(
-                result.ok
-                  ? { type: 'success', text: 'Struk berhasil dicetak.' }
-                  : { type: 'error', text: result.error ?? 'Gagal mencetak struk' }
-              );
-            }}
-            class="rounded-md bg-gray-800 px-3 py-2 text-sm text-white disabled:bg-gray-300"
-          >
-            {printing ? 'Mencetak...' : 'Cetak Struk Terakhir'}
-          </button>
+          <>
+            {printerConnected && (
+              <p class="flex items-center gap-1.5 text-xs font-medium text-accent-700">
+                <span class="h-1.5 w-1.5 rounded-full bg-accent-500" />
+                Printer tersambung
+              </p>
+            )}
+            {lastTransaction && (
+              <button
+                type="button"
+                disabled={printing}
+                onClick={async () => {
+                  setMessage(null);
+                  setPrinting(true);
+                  const result = await connectAndPrint(lastTransaction, profile.store_name);
+                  setPrinting(false);
+                  setMessage(
+                    result.ok
+                      ? { type: 'success', text: 'Struk berhasil dicetak.' }
+                      : { type: 'error', text: result.error ?? 'Gagal mencetak struk' }
+                  );
+                }}
+                class="flex items-center justify-center gap-1.5 rounded-xl bg-slate-800 py-2.5 text-sm font-medium text-white transition hover:bg-slate-900 disabled:bg-slate-300"
+              >
+                <ReceiptIcon class="h-4 w-4" />
+                {printing ? 'Mencetak...' : 'Cetak Struk Terakhir'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

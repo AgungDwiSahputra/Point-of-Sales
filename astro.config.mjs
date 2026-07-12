@@ -23,13 +23,13 @@ export default defineConfig({
     AstroPWA({
       registerType: 'autoUpdate',
       injectRegister: null, // registrasi manual lewat src/pwa.ts, lihat index.astro
-      includeAssets: ['favicon.svg', 'favicon.ico'],
+      includeAssets: ['favicon.ico', 'icons/logo-persegi.webp', 'icons/logo-tittle.webp'],
       manifest: {
-        name: 'POS Jamstack',
-        short_name: 'POS',
+        name: 'Sahma.id — POS System',
+        short_name: 'Sahma.id',
         description: 'Sistem POS offline-first untuk toko kecil',
-        theme_color: '#2563eb',
-        background_color: '#f9fafb',
+        theme_color: '#1874dd',
+        background_color: '#f8fafc',
         display: 'standalone',
         start_url: `${base}/`,
         scope: `${base}/`,
@@ -41,7 +41,7 @@ export default defineConfig({
       },
       workbox: {
         // cache-first untuk aset statis hasil build
-        globPatterns: ['**/*.{js,css,html,svg,ico,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,ico,png,webp,woff2}'],
         // Harus PERSIS sama dengan key precache index.html yang di-generate vite-plugin-pwa
         // (tanpa trailing slash), karena createHandlerBoundToURL butuh exact match di precache manifest -
         // bukan harus cocok dengan URL request masuk (NavigationRoute menangani semua navigasi dalam scope).

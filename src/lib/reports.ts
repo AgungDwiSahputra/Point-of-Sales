@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, type TransactionItem } from './db';
 import { supabase } from './supabase';
 
 export interface ReportTransaction {
@@ -6,12 +6,17 @@ export interface ReportTransaction {
   total_amount: number;
   sync_status: string;
   client_created_at: string;
-  item_count: number;
+  items: TransactionItem[];
+  voided_at: string | null;
 }
 
 export interface ReportResult {
   transactions: ReportTransaction[];
   source: 'online' | 'offline';
+}
+
+export interface VoidResult {
+  ok: boolean;
   error?: string;
 }
 
@@ -21,14 +26,11 @@ interface RawTransaction {
   sync_status: string;
   client_created_at: string;
   items: unknown;
+  voided_at?: string | null;
 }
 
 function toReportTransaction(tx: RawTransaction): ReportTransaction {
-  const items = Array.isArray(tx.items) ? tx.items : [];
-  const itemCount = items.reduce((sum: number, item) => {
-    const qty = (item as { qty?: number })?.qty;
-    return sum + (typeof qty === 'number' ? qty : 0);
-  }, 0);
+  const items = Array.isArray(tx.items) ? (tx.items as TransactionItem[]) : [];
 
   return {
     id: tx.id,
@@ -36,17 +38,19 @@ function toReportTransaction(tx: RawTransaction): ReportTransaction {
     total_amount: Math.round(Number(tx.total_amount)),
     sync_status: tx.sync_status,
     client_created_at: tx.client_created_at,
-    item_count: itemCount,
+    items,
+    voided_at: tx.voided_at ?? null,
   };
 }
 
 // F09: query langsung ke Supabase saat online (lintas-device), fallback ke Dexie saat offline
-// (data lokal saja, belum tentu lengkap).
+// (data lokal saja, belum tentu lengkap). Void hanya bisa dilakukan terhadap data online (lihat
+// voidTransaction) - transaksi pending lokal belum pernah tersinkron jadi belum ada yang dibatalkan.
 export async function fetchTransactionReport(userId: string, fromIso: string, toIso: string): Promise<ReportResult> {
   if (navigator.onLine) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, total_amount, sync_status, client_created_at, items')
+      .select('id, total_amount, sync_status, client_created_at, items, voided_at')
       .eq('user_id', userId)
       .gte('client_created_at', fromIso)
       .lte('client_created_at', toIso)
@@ -62,5 +66,22 @@ export async function fetchTransactionReport(userId: string, fromIso: string, to
   const filtered = local.filter((tx) => tx.client_created_at >= fromIso && tx.client_created_at <= toIso);
   filtered.sort((a, b) => (a.client_created_at < b.client_created_at ? 1 : -1));
 
-  return { transactions: filtered.map(toReportTransaction), source: 'offline' };
+  return { transactions: filtered.map((tx) => toReportTransaction({ ...tx, voided_at: null })), source: 'offline' };
+}
+
+// Pola "void" standar POS: transaksi tidak dihapus/diubah datanya, hanya ditandai batal + stok
+// dikembalikan otomatis lewat RPC (bukan dilakukan di klien, supaya atomik & tidak race condition
+// dengan sync engine perangkat lain). Butuh koneksi internet - hanya berlaku utk transaksi yang
+// sudah tersinkron ke server.
+export async function voidTransaction(transactionId: string): Promise<VoidResult> {
+  if (!navigator.onLine) {
+    return { ok: false, error: 'Perlu koneksi internet untuk membatalkan transaksi.' };
+  }
+
+  const { data, error } = await supabase.rpc('void_transaction', { p_transaction_id: transactionId });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: 'Transaksi tidak ditemukan, sudah dibatalkan, atau Anda tidak berwenang.' };
+
+  return { ok: true };
 }

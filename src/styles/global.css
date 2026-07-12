@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* Warna diambil langsung dari logo Sahma.id (public/icons/logo-persegi.webp) */
+@theme {
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bcdaff;
+  --color-brand-300: #8cc0ff;
+  --color-brand-400: #559ffb;
+  --color-brand-500: #1874dd;
+  --color-brand-600: #145ec0;
+  --color-brand-700: #124a9c;
+  --color-brand-800: #123d7d;
+  --color-brand-900: #123467;
+
+  --color-accent-50: #eafbf2;
+  --color-accent-100: #cef4dfe0;
+  --color-accent-400: #4dc186;
+  --color-accent-500: #28ad6e;
+  --color-accent-600: #219460;
+  --color-accent-700: #1c7a50;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover: 0 2px 4px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.10);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-feature-settings: "cv11", "ss01";
+}
