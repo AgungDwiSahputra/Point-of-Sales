@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-12T01:31:45.183Z",
+  "projectRoot": "D:\\DATA AGUNG\\Sites\\Point-of-Sales",
+  "structure": {
+    "hasPackageJson": true,
+    "hasTsConfig": true,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1783819905183
+}

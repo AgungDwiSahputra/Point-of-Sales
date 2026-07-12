@@ -1,0 +1,84 @@
+{
+  "timestamp": "2026-07-12T01:31:45.172Z",
+  "mode": "headless",
+  "workerType": "audit",
+  "model": "haiku",
+  "durationMs": 47737,
+  "executionId": "audit_1783819857435_razygk",
+  "success": true,
+  "findings": {
+    "vulnerabilities": [
+      {
+        "severity": "critical",
+        "file": ".env",
+        "line": 2,
+        "description": "Hardcoded Supabase Anonymous Key terekspos di version control. Token JWT ini memberikan akses direct ke database Supabase dan dapat digunakan oleh attacker untuk mengakses/memodifikasi data sensitif. File .env seharusnya tidak pernah di-commit."
+      },
+      {
+        "severity": "critical",
+        "file": ".env",
+        "line": 1,
+        "description": "Hardcoded Supabase Project URL terekspos di version control. Informasi ini dapat digunakan untuk targeted attacks terhadap project Supabase spesifik."
+      },
+      {
+        "severity": "high",
+        "file": "src/lib/supabase.ts",
+        "line": 6,
+        "description": "Client Supabase diinisialisasi dengan anonymous key tanpa authorization checks. Tidak ada validasi bahwa user hanya mengakses data mereka sendiri. Sistem mengandalkan Row Level Security (RLS) yang mungkin tidak dikonfigurasi dengan benar atau belum diimplementasikan."
+      },
+      {
+        "severity": "high",
+        "file": "src/lib/db.ts",
+        "line": 1,
+        "description": "IndexedDB (Dexie) menyimpan data lokal tanpa encryption. Sensitive data seperti transaction history tersimpan plaintext di browser storage yang dapat diakses via XSS atau local access."
+      },
+      {
+        "severity": "medium",
+        "file": "src/env.d.ts",
+        "line": 5,
+        "description": "PUBLIC_SUPABASE_ANON_KEY dideklarasikan dan akan ter-embedded di bundle JavaScript yang dikirim ke client. Credentials ini akan terlihat dalam network request dan source code viewer."
+      },
+      {
+        "severity": "medium",
+        "file": "src/lib/db.ts",
+        "line": 20,
+        "description": "Tidak ada runtime validation untuk LocalProduct dan TransactionItem sebelum disimpan ke IndexedDB. User input yang malicious bisa disimpan dan potentially dirender dengan XSS vulnerability."
+      },
+      {
+        "severity": "medium",
+        "file": "src/lib/supabase.ts",
+        "line": 1,
+        "description": "Tidak ada error handling atau rate limiting untuk Supabase API calls. Attacker bisa melakukan DoS attack atau brute force operations."
+      },
+      {
+        "severity": "medium",
+        "file": ".gitignore",
+        "line": 17,
+        "description": ".env sudah tercatat di .gitignore NAMUN file sudah ter-commit ke history. Credentials tetap terekspos di git history dan dapat di-recover."
+      },
+      {
+        "severity": "low",
+        "file": "package.json",
+        "line": 16,
+        "description": "Dependency versions menggunakan caret (^) yang memungkinkan minor/patch updates otomatis. Bisa introduce unexpected breaking changes atau security issues tanpa kontrol eksplisit."
+      }
+    ],
+    "riskScore": 85,
+    "recommendations": [
+      "🔴 URGENT: Rotate semua Supabase keys secara immediate di console Supabase. Key yang terekspos ini sudah compromised.",
+      "🔴 URGENT: Remove .env dari git history menggunakan 'git filter-branch' atau BFG Repo-Cleaner. Credentials di history masih recoverable.",
+      "🔴 Pindahkan environment variables ke file .env.local (git-ignored) atau gunakan secret management system (GitHub Secrets, Vercel Secrets, dll).",
+      "🟠 Implementasikan dan test Row Level Security (RLS) policies di Supabase untuk memastikan user hanya bisa akses data mereka sendiri.",
+      "🟠 Encrypt sensitive data di IndexedDB menggunakan library seperti 'libsodium.js' atau 'tweetnacl-js'.",
+      "🟠 Tambahkan comprehensive input validation untuk semua user inputs menggunakan Zod atau similar schema validation library.",
+      "🟠 Implementasikan CSRF protection dengan CSRF tokens untuk semua state-changing operations.",
+      "🟠 Tambahkan rate limiting di client dan server untuk prevent brute force dan DoS attacks.",
+      "🟠 Implementasikan Content Security Policy (CSP) headers untuk prevent XSS attacks.",
+      "🟟 Pin exact versions di package.json atau gunakan automated dependency scanning tools (Dependabot, Snyk).",
+      "🟟 Setup authentication flow yang proper (login/session management) untuk track user identity.",
+      "🟟 Audit Supabase schema dan pastikan tidak ada JSONB fields yang menerima raw user input tanpa validation."
+    ]
+  },
+  "rawOutputPreview": "Berikut adalah laporan analisis keamanan lengkap dalam format JSON:\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"critical\",\n      \"file\": \".env\",\n      \"line\": 2,\n      \"description\": \"Hardcoded Supabase Anonymous Key terekspos di version control. Token JWT ini memberikan akses direct ke database Supabase dan dapat digunakan oleh attacker untuk mengakses/memodifikasi data sensitif. File .env seharusnya tidak pernah di-commit.\"\n    },\n    {\n      \"severity\": \"critical\",\n      \"file\": \".env\",\n      \"line\": 1,\n      \"description\": \"Hardcoded Supabase Project URL terekspos di version control. Informasi ini dapat digunakan untuk targeted attacks terhadap project Supabase spesifik.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"src/lib/supabase.ts\",\n      \"line\": 6,\n      \"description\": \"Client Supabase diinisialisasi dengan anonymous key tanpa authorization checks. Tidak ada validasi bahwa user hanya mengakses data mereka sendiri. Sistem mengandalkan Row Level Security (RLS) yang mungkin tidak dikonfigurasi dengan benar atau belum diimplementasikan.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"src/lib/db.ts\",\n      \"line\": 1,\n      \"description\": \"IndexedDB (Dexie) menyimpan data lokal tanpa encryption. Sensitive data seperti transaction history tersimpan plaintext di browser storage yang dapat diakses via XSS atau local access.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"src/env.d.ts\",\n      \"line\": 5,\n      \"description\": \"PUBLIC_SUPABASE_ANON_KEY dideklarasikan dan akan ter-embedded di bundle JavaScript yang dikirim ke client. Credentials ini akan terlihat dalam network request dan source code viewer.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"src/lib/db.ts\",\n      \"line\": 20,\n      \"description\": \"Tidak ada runtime validation untuk LocalProduct dan TransactionItem sebelum disimpan ke IndexedDB. User input yang malicious bisa disimpan dan potentially dirender dengan XSS vulnerability.\"\n    },\n    {\n      \"seve",
+  "rawOutputLength": 4859
+}
