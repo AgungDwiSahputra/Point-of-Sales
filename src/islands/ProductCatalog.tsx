@@ -143,7 +143,7 @@ export default function ProductCatalog({ profile }: { profile: Profile }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setProductActive(ownerId, product.id, !product.is_active)}
+                      onClick={() => setProductActive(product.id, !product.is_active)}
                       class="flex-1 rounded-lg border border-slate-200 py-1.5 font-medium text-slate-600 transition hover:bg-slate-50"
                     >
                       {product.is_active ? 'Nonaktifkan' : 'Aktifkan'}

@@ -71,6 +71,8 @@ async function syncOne(tx: LocalTransaction): Promise<void> {
         user_id: tx.user_id,
         cashier_id: tx.cashier_id ?? null,
         total_amount: tx.total_amount,
+        discount_amount: tx.discount_amount,
+        shipping_amount: tx.shipping_amount,
         items: tx.items,
         sync_status: finalStatus,
         client_created_at: tx.client_created_at,

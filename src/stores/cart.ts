@@ -13,10 +13,11 @@ export const cartItemCount = computed(cartItems, (items) =>
   items.reduce((sum, item) => sum + item.qty, 0)
 );
 
-// Diskon (rupiah) & pajak (%) diinput manual oleh kasir per transaksi (F03) - belum ada halaman
-// pengaturan tarif pajak toko, jadi defaultnya 0 dan kasir yang menentukan saat checkout.
+// Diskon (rupiah), pajak (%), & ongkir (rupiah) diinput manual oleh kasir per transaksi (F03) - belum
+// ada halaman pengaturan tarif pajak toko, jadi defaultnya 0 dan kasir yang menentukan saat checkout.
 export const discountAmount = atom<number>(0);
 export const taxRatePercent = atom<number>(0);
+export const shippingAmount = atom<number>(0);
 
 export const cartTaxableAmount = computed([cartSubtotal, discountAmount], (subtotal, discount) =>
   Math.max(0, subtotal - discount)
@@ -27,7 +28,12 @@ export const cartTax = computed([cartTaxableAmount, taxRatePercent], (taxable, t
   Math.round(taxable * (taxRate / 100))
 );
 
-export const cartTotal = computed([cartTaxableAmount, cartTax], (taxable, tax) => taxable + tax);
+// Ongkir ditambahkan setelah pajak (tidak ikut dikenai pajak) - konvensi umum, ongkir bukan bagian
+// dari nilai barang yang dijual.
+export const cartTotal = computed(
+  [cartTaxableAmount, cartTax, shippingAmount],
+  (taxable, tax, shipping) => taxable + tax + shipping
+);
 
 export function setDiscount(amount: number): void {
   discountAmount.set(Math.max(0, Math.round(amount)));
@@ -35,6 +41,10 @@ export function setDiscount(amount: number): void {
 
 export function setTaxRate(percent: number): void {
   taxRatePercent.set(Math.max(0, percent));
+}
+
+export function setShipping(amount: number): void {
+  shippingAmount.set(Math.max(0, Math.round(amount)));
 }
 
 export async function loadCart(): Promise<void> {
@@ -89,6 +99,7 @@ export async function clearCart(): Promise<void> {
   await db.cart.clear();
   discountAmount.set(0);
   taxRatePercent.set(0);
+  shippingAmount.set(0);
 }
 
 export interface CheckoutResult {
@@ -115,6 +126,8 @@ export async function checkout(profile: Profile): Promise<CheckoutResult> {
     user_id: isCashier ? (profile.owner_id as string) : profile.id,
     cashier_id: isCashier ? profile.id : undefined,
     total_amount: cartTotal.get(),
+    discount_amount: discountAmount.get(),
+    shipping_amount: shippingAmount.get(),
     items: items.map(({ product_id, name, price, qty }) => ({ product_id, name, price, qty })),
     sync_status: 'pending',
     client_created_at: new Date().toISOString(),

@@ -29,9 +29,7 @@ export default function ProductForm({ userId, product, onDone, onCancel }: Produ
         setSubmitting(true);
 
         const input = { name, price, sku: sku.trim() || undefined, stock };
-        const result = product
-          ? await updateProduct(userId, product.id, input)
-          : await createProduct(userId, input);
+        const result = product ? await updateProduct(product.id, input) : await createProduct(userId, input);
 
         setSubmitting(false);
         if (result.ok) onDone();

@@ -4,10 +4,18 @@ import { useEffect, useState } from 'preact/hooks';
 import { assetUrl } from '../lib/assetUrl';
 import { cacheProductsFromSupabase } from '../lib/productCache';
 import { startSyncEngine } from '../lib/sync';
-import { clearProfile, createProfile, loadProfile, profile, profileLoading, type Profile } from '../stores/profile';
+import {
+  clearProfile,
+  createProfile,
+  loadProfile,
+  profile,
+  profileLoading,
+  updateProfile,
+  type Profile,
+} from '../stores/profile';
 import { session, sessionLoading, signInWithPassword, signOut, signUpWithPassword } from '../stores/session';
 import Cart from './Cart';
-import { LogoutIcon } from './icons';
+import { LogoutIcon, StoreIcon } from './icons';
 import ProductCatalog from './ProductCatalog';
 import TransactionHistory from './TransactionHistory';
 
@@ -67,6 +75,7 @@ function AuthShell({ children }: { children: ComponentChildren }) {
 function AuthenticatedApp({ profile: currentProfile }: { profile: Profile }) {
   const [productCacheError, setProductCacheError] = useState<string | null>(null);
   const [view, setView] = useState<'kasir' | 'laporan'>('kasir');
+  const [editingStore, setEditingStore] = useState(false);
   const ownerId =
     currentProfile.role === 'cashier' && currentProfile.owner_id ? currentProfile.owner_id : currentProfile.id;
 
@@ -102,15 +111,33 @@ function AuthenticatedApp({ profile: currentProfile }: { profile: Profile }) {
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-          >
-            <LogoutIcon class="h-4 w-4" />
-            <span class="hidden sm:inline">Keluar</span>
-          </button>
+          <div class="flex shrink-0 items-center gap-1">
+            {currentProfile.role === 'owner' && (
+              <button
+                type="button"
+                onClick={() => setEditingStore((v) => !v)}
+                class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100"
+              >
+                <StoreIcon class="h-4 w-4" />
+                <span class="hidden sm:inline">Edit Toko</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => signOut()}
+              class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <LogoutIcon class="h-4 w-4" />
+              <span class="hidden sm:inline">Keluar</span>
+            </button>
+          </div>
         </div>
+
+        {editingStore && (
+          <div class="mx-auto max-w-5xl px-4 pb-3">
+            <StoreSettingsForm profile={currentProfile} onDone={() => setEditingStore(false)} />
+          </div>
+        )}
 
         {currentProfile.role === 'owner' && (
           <div class="mx-auto max-w-5xl px-4 pb-3">
@@ -146,7 +173,11 @@ function AuthenticatedApp({ profile: currentProfile }: { profile: Profile }) {
         )}
 
         {view === 'laporan' && currentProfile.role === 'owner' ? (
-          <TransactionHistory userId={ownerId} storeName={currentProfile.store_name} />
+          <TransactionHistory
+            userId={ownerId}
+            storeName={currentProfile.store_name}
+            storeAddress={currentProfile.address}
+          />
         ) : (
           <main class="grid gap-6 sm:grid-cols-2 sm:items-start">
             <section>
@@ -260,6 +291,7 @@ function LoginForm() {
 
 function ProfileSetupForm({ userId }: { userId: string }) {
   const [storeName, setStoreName] = useState('');
+  const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -275,7 +307,7 @@ function ProfileSetupForm({ userId }: { userId: string }) {
           setError(null);
           setSubmitting(true);
           try {
-            await createProfile(userId, storeName);
+            await createProfile(userId, storeName, address);
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Gagal menyimpan profil');
           } finally {
@@ -294,6 +326,16 @@ function ProfileSetupForm({ userId }: { userId: string }) {
             class={inputClass}
           />
         </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-slate-600">Alamat toko (opsional, tampil di struk)</span>
+          <input
+            type="text"
+            value={address}
+            onInput={(e) => setAddress((e.target as HTMLInputElement).value)}
+            placeholder="mis. Jl. Merdeka No. 10, Bandung"
+            class={inputClass}
+          />
+        </label>
 
         <button type="submit" disabled={submitting} class={`${primaryButtonClass} mt-2`}>
           {submitting ? 'Menyimpan...' : 'Simpan & Mulai'}
@@ -305,5 +347,70 @@ function ProfileSetupForm({ userId }: { userId: string }) {
         )}
       </form>
     </AuthShell>
+  );
+}
+
+function StoreSettingsForm({ profile: currentProfile, onDone }: { profile: Profile; onDone: () => void }) {
+  const [storeName, setStoreName] = useState(currentProfile.store_name);
+  const [address, setAddress] = useState(currentProfile.address ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  return (
+    <form
+      class="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-card"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setError(null);
+        setSubmitting(true);
+        try {
+          await updateProfile(currentProfile.id, { store_name: storeName, address });
+          onDone();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Gagal menyimpan profil');
+        } finally {
+          setSubmitting(false);
+        }
+      }}
+    >
+      <h3 class="text-sm font-semibold text-slate-900">Pengaturan Toko</h3>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="flex flex-col gap-1">
+          <span class="text-xs font-medium text-slate-600">Nama toko</span>
+          <input
+            required
+            value={storeName}
+            onInput={(e) => setStoreName((e.target as HTMLInputElement).value)}
+            class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+          />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs font-medium text-slate-600">Alamat toko (tampil di struk)</span>
+          <input
+            value={address}
+            onInput={(e) => setAddress((e.target as HTMLInputElement).value)}
+            placeholder="mis. Jl. Merdeka No. 10, Bandung"
+            class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+          />
+        </label>
+      </div>
+      {error && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div class="flex gap-2">
+        <button
+          type="submit"
+          disabled={submitting}
+          class="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:bg-slate-300 sm:flex-none sm:px-6"
+        >
+          {submitting ? 'Menyimpan...' : 'Simpan'}
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
   );
 }

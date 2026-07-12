@@ -5,10 +5,12 @@ declare module '@point-of-sale/receipt-printer-encoder' {
   export interface ReceiptPrinterEncoderOptions {
     language?: 'esc-pos' | 'star-prnt' | 'star-line';
     codepageMapping?: string;
+    columns?: number;
   }
 
   export default class ReceiptPrinterEncoder {
     constructor(options?: ReceiptPrinterEncoderOptions);
+    readonly columns: number;
     initialize(): this;
     text(value: string): this;
     line(value: string): this;

@@ -20,7 +20,9 @@ import {
   loadCart,
   removeFromCart,
   setDiscount,
+  setShipping,
   setTaxRate,
+  shippingAmount,
   taxRatePercent,
   updateQty,
 } from '../stores/cart';
@@ -41,6 +43,7 @@ export default function Cart({ profile }: { profile: Profile }) {
   const subtotal = useStore(cartSubtotal);
   const discount = useStore(discountAmount);
   const taxRate = useStore(taxRatePercent);
+  const shipping = useStore(shippingAmount);
   const tax = useStore(cartTax);
   const total = useStore(cartTotal);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -155,6 +158,17 @@ export default function Cart({ profile }: { profile: Profile }) {
             <span>{currency.format(tax)}</span>
           </div>
 
+          <label class="flex items-center justify-between gap-2 text-sm text-slate-600">
+            <span>Ongkir (Rp)</span>
+            <input
+              type="number"
+              min={0}
+              value={shipping}
+              onInput={(e) => setShipping(Number((e.target as HTMLInputElement).value))}
+              class={smallFieldClass}
+            />
+          </label>
+
           <div class="flex items-center justify-between border-t border-slate-100 pt-2.5">
             <span class="text-sm font-semibold text-slate-900">Total</span>
             <span class="text-lg font-bold text-brand-700">{currency.format(total)}</span>
@@ -207,7 +221,9 @@ export default function Cart({ profile }: { profile: Profile }) {
 
         {!isBluetoothPrintingSupported() ? (
           <p class="text-xs text-slate-500">
-            Web Bluetooth tidak didukung di browser ini. Gunakan Chrome/Edge di Android atau Desktop.
+            Perangkat/browser ini tidak mendukung cetak Bluetooth. <strong>iOS tidak didukung sama sekali</strong>{' '}
+            (termasuk Chrome/Firefox di iPhone/iPad - semua browser di iOS wajib pakai mesin Safari, bukan
+            batasan pilihan browser). Gunakan Android, Windows, atau Mac (Chrome/Edge) untuk mencetak.
           </p>
         ) : (
           <>
@@ -224,7 +240,10 @@ export default function Cart({ profile }: { profile: Profile }) {
                 onClick={async () => {
                   setMessage(null);
                   setPrinting(true);
-                  const result = await connectAndPrint(lastTransaction, profile.store_name);
+                  const result = await connectAndPrint(lastTransaction, {
+                    name: profile.store_name,
+                    address: profile.address,
+                  });
                   setPrinting(false);
                   setMessage(
                     result.ok

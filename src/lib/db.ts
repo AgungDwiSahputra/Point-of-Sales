@@ -25,6 +25,8 @@ export interface LocalTransaction {
   user_id: string;
   cashier_id?: string;
   total_amount: number; // rupiah bulat (integer), bukan desimal/float
+  discount_amount: number; // rupiah bulat (integer) - dicatat terpisah supaya bisa ditampilkan lagi di struk
+  shipping_amount: number; // rupiah bulat (integer) - ongkir
   items: TransactionItem[];
   sync_status: TransactionSyncStatus; // 'pending' & 'sync_error' hanya ada lokal; ke Supabase hanya kirim 'synced'/'needs_review'
   client_created_at: string;

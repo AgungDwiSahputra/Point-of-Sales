@@ -46,7 +46,13 @@ function localDateBoundToIso(dateStr: string, endOfDay: boolean): string {
   return date.toISOString();
 }
 
-export default function TransactionHistory({ userId, storeName }: { userId: string; storeName: string }) {
+interface TransactionHistoryProps {
+  userId: string;
+  storeName: string;
+  storeAddress: string | null;
+}
+
+export default function TransactionHistory({ userId, storeName, storeAddress }: TransactionHistoryProps) {
   const [fromDate, setFromDate] = useState(todayDateString());
   const [toDate, setToDate] = useState(todayDateString());
   const [transactions, setTransactions] = useState<ReportTransaction[]>([]);
@@ -125,15 +131,22 @@ export default function TransactionHistory({ userId, storeName }: { userId: stri
           </p>
         )}
 
-        {isBluetoothPrintingSupported() && printerConnected && (
-          <div class="flex items-center gap-2 border-t border-slate-100 pt-3">
-            <BluetoothIcon class="h-4 w-4 shrink-0 text-slate-400" />
+        <div class="flex items-center gap-2 border-t border-slate-100 pt-3">
+          <BluetoothIcon class="h-4 w-4 shrink-0 text-slate-400" />
+          {!isBluetoothPrintingSupported() ? (
+            <p class="text-xs text-slate-500">
+              Cetak Bluetooth tidak didukung di perangkat/browser ini. <strong>iOS tidak didukung sama sekali</strong>{' '}
+              (termasuk Chrome/Firefox di iPhone/iPad). Gunakan Android, Windows, atau Mac untuk mencetak dari sini.
+            </p>
+          ) : printerConnected ? (
             <p class="flex items-center gap-1.5 text-xs font-medium text-accent-700">
               <span class="h-1.5 w-1.5 rounded-full bg-accent-500" />
               Printer tersambung
             </p>
-          </div>
-        )}
+          ) : (
+            <p class="text-xs text-slate-500">Klik "Cetak" pada transaksi untuk menyambungkan printer.</p>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -227,7 +240,7 @@ export default function TransactionHistory({ userId, storeName }: { userId: stri
                             onClick={async () => {
                               setBusyId(tx.id);
                               setRowMessage(null);
-                              const result = await connectAndPrint(tx, storeName);
+                              const result = await connectAndPrint(tx, { name: storeName, address: storeAddress });
                               setBusyId(null);
                               setRowMessage({
                                 id: tx.id,

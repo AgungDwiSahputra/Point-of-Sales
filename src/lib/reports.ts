@@ -4,6 +4,8 @@ import { supabase } from './supabase';
 export interface ReportTransaction {
   id: string;
   total_amount: number;
+  discount_amount: number;
+  shipping_amount: number;
   sync_status: string;
   client_created_at: string;
   items: TransactionItem[];
@@ -23,6 +25,8 @@ export interface VoidResult {
 interface RawTransaction {
   id: string;
   total_amount: number | string;
+  discount_amount?: number | string;
+  shipping_amount?: number | string;
   sync_status: string;
   client_created_at: string;
   items: unknown;
@@ -36,6 +40,8 @@ function toReportTransaction(tx: RawTransaction): ReportTransaction {
     id: tx.id,
     // Postgres numeric datang sebagai string lewat PostgREST - paksa ke integer rupiah.
     total_amount: Math.round(Number(tx.total_amount)),
+    discount_amount: Math.round(Number(tx.discount_amount ?? 0)),
+    shipping_amount: Math.round(Number(tx.shipping_amount ?? 0)),
     sync_status: tx.sync_status,
     client_created_at: tx.client_created_at,
     items,
@@ -50,7 +56,7 @@ export async function fetchTransactionReport(userId: string, fromIso: string, to
   if (navigator.onLine) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, total_amount, sync_status, client_created_at, items, voided_at')
+      .select('id, total_amount, discount_amount, shipping_amount, sync_status, client_created_at, items, voided_at')
       .eq('user_id', userId)
       .gte('client_created_at', fromIso)
       .lte('client_created_at', toIso)

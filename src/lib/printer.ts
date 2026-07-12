@@ -7,9 +7,17 @@ import type { TransactionItem } from './db';
 // Longgar dengan sengaja (bukan LocalTransaction penuh) supaya bisa menerima transaksi dari
 // sumber mana pun yang punya bentuk ini - keranjang (LocalTransaction) maupun laporan (ReportTransaction).
 export interface PrintableTransaction {
+  id: string;
   items: TransactionItem[];
   total_amount: number;
+  discount_amount: number;
+  shipping_amount: number;
   client_created_at: string;
+}
+
+export interface StoreInfo {
+  name: string;
+  address?: string | null;
 }
 
 export function isBluetoothPrintingSupported(): boolean {
@@ -133,7 +141,7 @@ export async function connectPrinter(): Promise<PrinterActionResult> {
 
 export async function printReceipt(
   transaction: PrintableTransaction,
-  storeName: string
+  store: StoreInfo
 ): Promise<PrinterActionResult> {
   if (!printer) {
     return { ok: false, error: 'Web Bluetooth tidak didukung di browser ini.' };
@@ -143,7 +151,7 @@ export async function printReceipt(
   }
 
   try {
-    const data = buildReceipt(transaction, storeName, connectedDevice);
+    const data = buildReceipt(transaction, store, connectedDevice);
     await printer.print(data);
     return { ok: true };
   } catch (error) {
@@ -156,46 +164,114 @@ export async function printReceipt(
 // persyaratan user-activation Web Bluetooth - operasi GATT connect/print setelahnya tidak butuh gesture baru.
 export async function connectAndPrint(
   transaction: PrintableTransaction,
-  storeName: string
+  store: StoreInfo
 ): Promise<PrinterActionResult> {
   if (!isPrinterConnected()) {
     const connectResult = await connectPrinter();
     if (!connectResult.ok) return connectResult;
   }
-  return printReceipt(transaction, storeName);
+  return printReceipt(transaction, store);
+}
+
+const DEFAULT_STORE_ADDRESS = 'Alam Elok F5 No.3, Bengle';
+const NAME_COLUMN_WIDTH = 12; // lebar kolom nama produk & label ringkasan (Diskon/Pajak/Ongkir/GRAND TOTAL)
+
+// Kertas 58mm - printer thermal kecil yang umum dipakai. Tanpa ini, encoder default ke 42 kolom
+// (ukuran kertas 80mm) yang kepanjangan/terpotong di printer 58mm. Cross-check ke seluruh model 58mm
+// asli di database pustaka ini (Epson TM-P20II, POS-5890, Star mC-Print2/mPOP/SM-L200) - semuanya
+// konsisten 32 kolom untuk font standar 12x24 di 203 DPI, bukan angka tebakan.
+const RECEIPT_COLUMNS = 32;
+
+function formatThousands(n: number): string {
+  return new Intl.NumberFormat('id-ID').format(Math.round(n));
+}
+
+function formatRupiah(n: number): string {
+  return `Rp${formatThousands(n)}`;
+}
+
+// Label diratakan ke kolom tetap lalu ": nilai" - mis. "Diskon      : (2.000)", "GRAND TOTAL : Rp23.000".
+function labelLine(label: string, value: string): string {
+  const padded = label.length < NAME_COLUMN_WIDTH ? label.padEnd(NAME_COLUMN_WIDTH) : label;
+  return `${padded}: ${value}`;
 }
 
 function buildReceipt(
   transaction: PrintableTransaction,
-  storeName: string,
+  store: StoreInfo,
   device: ConnectedBluetoothPrinter
 ): Uint8Array {
-  const currency = new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  });
-
   const encoder = new ReceiptPrinterEncoder({
     language: device.language,
     codepageMapping: resolveCodepageMapping(device.language, device.codepageMapping),
+    columns: RECEIPT_COLUMNS,
   });
 
-  encoder.initialize().align('center').bold(true).line(storeName).bold(false).align('left').newline();
+  const columns = encoder.columns;
+  const divider = '-'.repeat(columns);
+
+  // Diskon & ongkir disimpan terpisah per transaksi, tapi pajak tidak (sudah tercakup di total_amount
+  // sejak awal) - jadi diturunkan balik dari selisih, bukan ditebak: pajak = total - (subtotal - diskon) - ongkir.
+  const subtotal = transaction.items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const taxableAmount = Math.max(0, subtotal - transaction.discount_amount);
+  const tax = transaction.total_amount - taxableAmount - transaction.shipping_amount;
+
+  const address = store.address?.trim() || DEFAULT_STORE_ADDRESS;
+  const transactionIdShort = transaction.id.slice(0, 8);
+  const dateLabel = new Date(transaction.client_created_at).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  encoder
+    .initialize()
+    .align('center')
+    .bold(true)
+    .line(store.name.toUpperCase())
+    .bold(false)
+    .align('left')
+    .line(address)
+    .line(divider)
+    .line(`ID Transaksi: ${transactionIdShort}`)
+    .line(`Tanggal: ${dateLabel}`)
+    .line(divider);
 
   for (const item of transaction.items) {
-    encoder.line(`${item.name}`);
-    encoder.line(`  ${item.qty} x ${currency.format(item.price)} = ${currency.format(item.price * item.qty)}`);
+    const detail = `${item.qty} x ${formatThousands(item.price)} = ${formatThousands(item.price * item.qty)}`;
+    const namePart = item.name.length < NAME_COLUMN_WIDTH ? item.name.padEnd(NAME_COLUMN_WIDTH) : item.name;
+    const combined = `${namePart} | ${detail}`;
+
+    if (combined.length <= columns) {
+      encoder.line(combined);
+    } else {
+      // Nama produk kepanjangan utk muat satu baris (mis. printer 32 kolom) - pisah jadi dua baris
+      // daripada terpotong/terbungkus di tengah kata.
+      encoder.line(item.name);
+      encoder.line(`  | ${detail}`);
+    }
+  }
+
+  encoder.line(divider);
+
+  if (transaction.discount_amount > 0) {
+    encoder.line(labelLine('Diskon', `(${formatThousands(transaction.discount_amount)})`));
+  }
+  if (tax > 0) {
+    encoder.line(labelLine('Pajak', formatThousands(tax)));
+  }
+  if (transaction.shipping_amount > 0) {
+    encoder.line(labelLine('Ongkir', formatThousands(transaction.shipping_amount)));
   }
 
   encoder
-    .newline()
+    .line(divider)
     .bold(true)
-    .line(`Total: ${currency.format(transaction.total_amount)}`)
+    .line(labelLine('GRAND TOTAL', formatRupiah(transaction.total_amount)))
     .bold(false)
-    .newline()
+    .line(divider)
     .align('center')
-    .line(new Date(transaction.client_created_at).toLocaleString('id-ID'))
+    .line('Terima Kasih')
     .newline()
     .newline()
     .cut();
