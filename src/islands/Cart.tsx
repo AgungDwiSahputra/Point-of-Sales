@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { LocalTransaction } from '../lib/db';
+import type { LocalTransaction, PaymentMethod } from '../lib/db';
 import {
   connectAndPrint,
   isBluetoothPrintingSupported,
@@ -38,6 +38,11 @@ const currency = new Intl.NumberFormat('id-ID', {
 const smallFieldClass =
   'w-24 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10';
 
+const PAYMENT_METHODS: { key: PaymentMethod; label: string }[] = [
+  { key: 'cash', label: 'Cash' },
+  { key: 'qris', label: 'QRIS' },
+];
+
 export default function Cart({ profile }: { profile: Profile }) {
   const items = useStore(cartItems);
   const subtotal = useStore(cartSubtotal);
@@ -47,6 +52,7 @@ export default function Cart({ profile }: { profile: Profile }) {
   const tax = useStore(cartTax);
   const total = useStore(cartTotal);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [submitting, setSubmitting] = useState(false);
   const checkoutInFlight = useRef(false);
   const [printerConnected, setPrinterConnected] = useState(false);
@@ -175,6 +181,26 @@ export default function Cart({ profile }: { profile: Profile }) {
             <span class="text-lg font-bold text-brand-700">{currency.format(total)}</span>
           </div>
 
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-slate-500">Metode Bayar</span>
+            <div class="flex gap-2">
+              {PAYMENT_METHODS.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setPaymentMethod(m.key)}
+                  class={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+                    paymentMethod === m.key
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             type="button"
             disabled={submitting}
@@ -183,7 +209,7 @@ export default function Cart({ profile }: { profile: Profile }) {
               checkoutInFlight.current = true;
               setMessage(null);
               setSubmitting(true);
-              const result = await checkout(profile);
+              const result = await checkout(profile, paymentMethod);
               setSubmitting(false);
               checkoutInFlight.current = false;
               setLastTransaction(result.transaction ?? null);

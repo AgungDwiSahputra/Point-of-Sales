@@ -29,6 +29,16 @@ const STATUS_LABELS: Record<string, string> = {
   sync_error: 'Gagal sync',
 };
 
+const PAYMENT_METHOD_STYLES: Record<string, string> = {
+  cash: 'bg-slate-100 text-slate-600',
+  qris: 'bg-violet-50 text-violet-700',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  qris: 'QRIS',
+};
+
 function todayDateString(): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -249,6 +259,11 @@ export default function TransactionHistory({ userId, storeName, storeAddress }: 
                     <div class="mt-1 flex items-center gap-2">
                       <span class="text-xs text-slate-500">
                         {tx.items.reduce((sum, item) => sum + item.qty, 0)} item
+                      </span>
+                      <span
+                        class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_METHOD_STYLES[tx.payment_method] ?? 'bg-slate-100 text-slate-600'}`}
+                      >
+                        {PAYMENT_METHOD_LABELS[tx.payment_method] ?? tx.payment_method}
                       </span>
                       {voided ? (
                         <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">

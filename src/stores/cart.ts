@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import { db, type CartItem, type LocalTransaction } from '../lib/db';
+import { db, type CartItem, type LocalTransaction, type PaymentMethod } from '../lib/db';
 import type { Profile } from './profile';
 import { syncPendingTransactions } from '../lib/sync';
 
@@ -110,7 +110,7 @@ export interface CheckoutResult {
 
 let checkoutInFlight = false;
 
-export async function checkout(profile: Profile): Promise<CheckoutResult> {
+export async function checkout(profile: Profile, paymentMethod: PaymentMethod): Promise<CheckoutResult> {
   if (checkoutInFlight) return { ok: false, error: 'Checkout sedang diproses' };
   checkoutInFlight = true;
 
@@ -134,6 +134,7 @@ export async function checkout(profile: Profile): Promise<CheckoutResult> {
       total_amount: cartTotal.get(),
       discount_amount: discountAmount.get(),
       shipping_amount: shippingAmount.get(),
+      payment_method: paymentMethod,
       items: items.map(({ product_id, name, price, qty }) => ({ product_id, name, price, qty })),
       sync_status: 'pending',
       client_created_at: new Date().toISOString(),

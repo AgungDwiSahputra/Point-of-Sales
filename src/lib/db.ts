@@ -20,6 +20,8 @@ export interface TransactionItem {
 
 export type TransactionSyncStatus = 'pending' | 'synced' | 'needs_review' | 'sync_error';
 
+export type PaymentMethod = 'cash' | 'qris';
+
 export interface LocalTransaction {
   id: string; // uuid v4 dibuat di klien saat offline
   user_id: string;
@@ -27,6 +29,7 @@ export interface LocalTransaction {
   total_amount: number; // rupiah bulat (integer), bukan desimal/float
   discount_amount: number; // rupiah bulat (integer) - dicatat terpisah supaya bisa ditampilkan lagi di struk
   shipping_amount: number; // rupiah bulat (integer) - ongkir
+  payment_method: PaymentMethod;
   items: TransactionItem[];
   sync_status: TransactionSyncStatus; // 'pending' & 'sync_error' hanya ada lokal; ke Supabase hanya kirim 'synced'/'needs_review'
   client_created_at: string;

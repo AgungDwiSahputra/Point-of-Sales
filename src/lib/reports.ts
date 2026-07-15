@@ -1,4 +1,4 @@
-import { db, type TransactionItem } from './db';
+import { db, type PaymentMethod, type TransactionItem } from './db';
 import { supabase } from './supabase';
 
 export interface ReportTransaction {
@@ -6,6 +6,7 @@ export interface ReportTransaction {
   total_amount: number;
   discount_amount: number;
   shipping_amount: number;
+  payment_method: PaymentMethod;
   sync_status: string;
   client_created_at: string;
   items: TransactionItem[];
@@ -27,6 +28,7 @@ interface RawTransaction {
   total_amount: number | string;
   discount_amount?: number | string;
   shipping_amount?: number | string;
+  payment_method?: PaymentMethod;
   sync_status: string;
   client_created_at: string;
   items: unknown;
@@ -42,6 +44,8 @@ function toReportTransaction(tx: RawTransaction): ReportTransaction {
     total_amount: Math.round(Number(tx.total_amount)),
     discount_amount: Math.round(Number(tx.discount_amount ?? 0)),
     shipping_amount: Math.round(Number(tx.shipping_amount ?? 0)),
+    // transaksi lokal yang tersimpan sebelum fitur metode bayar ada belum punya field ini
+    payment_method: tx.payment_method ?? 'cash',
     sync_status: tx.sync_status,
     client_created_at: tx.client_created_at,
     items,
@@ -56,7 +60,9 @@ export async function fetchTransactionReport(userId: string, fromIso: string, to
   if (navigator.onLine) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, total_amount, discount_amount, shipping_amount, sync_status, client_created_at, items, voided_at')
+      .select(
+        'id, total_amount, discount_amount, shipping_amount, payment_method, sync_status, client_created_at, items, voided_at'
+      )
       .eq('user_id', userId)
       .gte('client_created_at', fromIso)
       .lte('client_created_at', toIso)

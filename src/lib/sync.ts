@@ -73,6 +73,7 @@ async function syncOne(tx: LocalTransaction): Promise<void> {
         total_amount: tx.total_amount,
         discount_amount: tx.discount_amount,
         shipping_amount: tx.shipping_amount,
+        payment_method: tx.payment_method,
         items: tx.items,
         sync_status: finalStatus,
         client_created_at: tx.client_created_at,
