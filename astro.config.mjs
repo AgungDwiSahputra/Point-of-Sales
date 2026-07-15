@@ -15,7 +15,11 @@ export default defineConfig({
   site: 'https://agungdwisahputra.github.io',
   base,
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
+    server: {
+      // izinkan akses dev server lewat tunnel ngrok saat testing lintas device (host asli tidak dikenal Vite secara default)
+      allowedHosts: ['.ngrok-free.app'],
+    },
   },
 
   integrations: [

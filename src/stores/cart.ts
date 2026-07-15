@@ -108,36 +108,45 @@ export interface CheckoutResult {
   transaction?: LocalTransaction;
 }
 
+let checkoutInFlight = false;
+
 export async function checkout(profile: Profile): Promise<CheckoutResult> {
-  const items = cartItems.get();
-  if (items.length === 0) return { ok: false, error: 'Keranjang kosong' };
+  if (checkoutInFlight) return { ok: false, error: 'Checkout sedang diproses' };
+  checkoutInFlight = true;
 
-  // Validasi ulang stok terhadap cache lokal terbaru (F03), bukan cuma snapshot saat item ditambahkan
-  for (const item of items) {
-    const product = await db.products.get(item.product_id);
-    if (!product || product.stock < item.qty) {
-      return { ok: false, error: `Stok "${item.name}" tidak cukup` };
+  try {
+    const items = cartItems.get();
+    if (items.length === 0) return { ok: false, error: 'Keranjang kosong' };
+
+    // Validasi ulang stok terhadap cache lokal terbaru (F03), bukan cuma snapshot saat item ditambahkan
+    for (const item of items) {
+      const product = await db.products.get(item.product_id);
+      if (!product || product.stock < item.qty) {
+        return { ok: false, error: `Stok "${item.name}" tidak cukup` };
+      }
     }
+
+    const isCashier = profile.role === 'cashier' && profile.owner_id;
+    const transaction: LocalTransaction = {
+      id: crypto.randomUUID(),
+      user_id: isCashier ? (profile.owner_id as string) : profile.id,
+      cashier_id: isCashier ? profile.id : undefined,
+      total_amount: cartTotal.get(),
+      discount_amount: discountAmount.get(),
+      shipping_amount: shippingAmount.get(),
+      items: items.map(({ product_id, name, price, qty }) => ({ product_id, name, price, qty })),
+      sync_status: 'pending',
+      client_created_at: new Date().toISOString(),
+      sync_attempts: 0,
+      synced_item_ids: [],
+    };
+
+    await db.transactions.add(transaction);
+    await clearCart();
+    void syncPendingTransactions(); // coba sinkron langsung kalau online, tanpa menunggu polling berikutnya
+
+    return { ok: true, transaction };
+  } finally {
+    checkoutInFlight = false;
   }
-
-  const isCashier = profile.role === 'cashier' && profile.owner_id;
-  const transaction: LocalTransaction = {
-    id: crypto.randomUUID(),
-    user_id: isCashier ? (profile.owner_id as string) : profile.id,
-    cashier_id: isCashier ? profile.id : undefined,
-    total_amount: cartTotal.get(),
-    discount_amount: discountAmount.get(),
-    shipping_amount: shippingAmount.get(),
-    items: items.map(({ product_id, name, price, qty }) => ({ product_id, name, price, qty })),
-    sync_status: 'pending',
-    client_created_at: new Date().toISOString(),
-    sync_attempts: 0,
-    synced_item_ids: [],
-  };
-
-  await db.transactions.add(transaction);
-  await clearCart();
-  void syncPendingTransactions(); // coba sinkron langsung kalau online, tanpa menunggu polling berikutnya
-
-  return { ok: true, transaction };
 }

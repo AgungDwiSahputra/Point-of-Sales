@@ -46,6 +46,32 @@ function localDateBoundToIso(dateStr: string, endOfDay: boolean): string {
   return date.toISOString();
 }
 
+function dateStringDaysAgo(days: number): string {
+  const now = new Date();
+  now.setDate(now.getDate() - days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+// Senin dianggap awal minggu (konvensi kalender Indonesia), bukan Minggu seperti default getDay() JS
+function mondayOfThisWeekDateString(): string {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Minggu, 1 = Senin, ... 6 = Sabtu
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  now.setDate(now.getDate() - daysSinceMonday);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+const DATE_PRESETS = [
+  { key: 'custom', label: 'Custom' },
+  { key: 'yesterday', label: '1 Hari Lalu' },
+  { key: 'today', label: 'Hari Ini' },
+  { key: 'week', label: 'Minggu Ini' },
+] as const;
+
+type DatePresetKey = (typeof DATE_PRESETS)[number]['key'];
+
 interface TransactionHistoryProps {
   userId: string;
   storeName: string;
@@ -55,6 +81,7 @@ interface TransactionHistoryProps {
 export default function TransactionHistory({ userId, storeName, storeAddress }: TransactionHistoryProps) {
   const [fromDate, setFromDate] = useState(todayDateString());
   const [toDate, setToDate] = useState(todayDateString());
+  const [datePreset, setDatePreset] = useState<DatePresetKey>('today');
   const [transactions, setTransactions] = useState<ReportTransaction[]>([]);
   const [source, setSource] = useState<'online' | 'offline' | null>(null);
   const [loading, setLoading] = useState(false);
@@ -77,6 +104,23 @@ export default function TransactionHistory({ userId, storeName, storeAddress }: 
 
   useEffect(load, [userId, fromDate, toDate]);
 
+  const applyDatePreset = (key: DatePresetKey) => {
+    setDatePreset(key);
+    if (key === 'today') {
+      const d = todayDateString();
+      setFromDate(d);
+      setToDate(d);
+    } else if (key === 'yesterday') {
+      const d = dateStringDaysAgo(1);
+      setFromDate(d);
+      setToDate(d);
+    } else if (key === 'week') {
+      setFromDate(mondayOfThisWeekDateString());
+      setToDate(todayDateString());
+    }
+    // 'custom' - biarkan fromDate/toDate apa adanya, diatur manual lewat input Dari/Sampai
+  };
+
   useEffect(() => {
     onPrinterConnected(() => setPrinterConnected(true));
     onPrinterDisconnected(() => setPrinterConnected(false));
@@ -85,6 +129,10 @@ export default function TransactionHistory({ userId, storeName, storeAddress }: 
 
   const activeTransactions = transactions.filter((tx) => !tx.voided_at);
   const total = activeTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
+  const totalItems = activeTransactions.reduce(
+    (sum, tx) => sum + tx.items.reduce((itemSum, item) => itemSum + item.qty, 0),
+    0
+  );
   const voidedCount = transactions.length - activeTransactions.length;
 
   return (
@@ -93,7 +141,7 @@ export default function TransactionHistory({ userId, storeName, storeAddress }: 
         <p class="text-sm text-brand-100">Total Penjualan</p>
         <p class="mt-1 text-3xl font-bold">{currency.format(total)}</p>
         <p class="mt-1 text-xs text-brand-100">
-          {activeTransactions.length} transaksi pada rentang terpilih
+          {totalItems} item dari {activeTransactions.length} transaksi pada rentang terpilih
           {voidedCount > 0 && ` · ${voidedCount} dibatalkan`}
         </p>
       </div>
@@ -103,26 +151,43 @@ export default function TransactionHistory({ userId, storeName, storeAddress }: 
           <CalendarIcon class="h-4 w-4" />
           <span class="text-sm font-medium">Filter tanggal</span>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="flex flex-col gap-1 text-xs text-slate-500">
-            Dari
-            <input
-              type="date"
-              value={fromDate}
-              onInput={(e) => setFromDate((e.target as HTMLInputElement).value)}
-              class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
-            />
-          </label>
-          <label class="flex flex-col gap-1 text-xs text-slate-500">
-            Sampai
-            <input
-              type="date"
-              value={toDate}
-              onInput={(e) => setToDate((e.target as HTMLInputElement).value)}
-              class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
-            />
-          </label>
+        <div class="flex flex-wrap gap-2">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => applyDatePreset(p.key)}
+              class={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                datePreset === p.key ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
+
+        {datePreset === 'custom' && (
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="flex flex-col gap-1 text-xs text-slate-500">
+              Dari
+              <input
+                type="date"
+                value={fromDate}
+                onInput={(e) => setFromDate((e.target as HTMLInputElement).value)}
+                class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+              />
+            </label>
+            <label class="flex flex-col gap-1 text-xs text-slate-500">
+              Sampai
+              <input
+                type="date"
+                value={toDate}
+                onInput={(e) => setToDate((e.target as HTMLInputElement).value)}
+                class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+              />
+            </label>
+          </div>
+        )}
 
         {source === 'offline' && (
           <p class="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">

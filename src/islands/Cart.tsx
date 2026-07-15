@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { LocalTransaction } from '../lib/db';
 import {
   connectAndPrint,
@@ -48,6 +48,7 @@ export default function Cart({ profile }: { profile: Profile }) {
   const total = useStore(cartTotal);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const checkoutInFlight = useRef(false);
   const [printerConnected, setPrinterConnected] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<LocalTransaction | null>(null);
@@ -178,10 +179,13 @@ export default function Cart({ profile }: { profile: Profile }) {
             type="button"
             disabled={submitting}
             onClick={async () => {
+              if (checkoutInFlight.current) return;
+              checkoutInFlight.current = true;
               setMessage(null);
               setSubmitting(true);
               const result = await checkout(profile);
               setSubmitting(false);
+              checkoutInFlight.current = false;
               setLastTransaction(result.transaction ?? null);
               setMessage(
                 result.ok
